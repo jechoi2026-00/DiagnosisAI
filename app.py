@@ -136,13 +136,12 @@ if uploaded_file is not None:
 
     with report_col1:
         st.markdown("#### 📍 암 의심 구역 탐지 (Regional Heatmap)")
-        # 9개 타일별 위험도 계산
         heatmap_data = []
         for y in range(0, 96, 32):
             row = []
             for x in range(0, 96, 32):
                 tile = img_bgr[y:y+32, x:x+32]
-                if np.mean(tile) <= 245: # 배경이 아니면 예측
+                if np.mean(tile) <= 245: 
                     t_feat = get_32_features(tile)[selected_indices].reshape(1, -1)
                     t_scaled = scaler.transform(t_feat)
                     t_prob = model.predict_proba(t_scaled)[0][1]
@@ -159,11 +158,9 @@ if uploaded_file is not None:
         )
         fig_heatmap.update_layout(height=350)
         st.plotly_chart(fig_heatmap, use_container_width=True)
-        st.caption("※ 9개 구역(32x32) 중 짙은 빨간색 구역이 암세포 집중 의심 지역입니다.")
 
     with report_col2:
         st.markdown("#### 🕸️ 조직 패턴 다차원 비교 (Radar Chart)")
-        # 베이스라인 데이터 (학습 데이터 평균값 기반 설정 권장)
         normal_base = [0.2, 0.3, 0.2, 0.7, 0.3] 
         cancer_base = [0.7, 0.7, 0.8, 0.2, 0.8]
         
@@ -174,23 +171,45 @@ if uploaded_file is not None:
 
         fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 1])), height=350)
         st.plotly_chart(fig_radar, use_container_width=True)
-        st.caption("※ 검은색 선이 빨간색 영역(암 표준)에 가까울수록 암 조직 특성을 띱니다.")
 
-    st.markdown("#### 📝 지표별 상세 판독 결과")
+    # --- [수정 구간] 지표별 상세 판독 결과 시각화 ---
+    st.markdown("#### 📝 지표별 상세 판독 결과 (± 변화량 시각화)")
+    
+    # Diverging Bar Chart 생성
+    fig_detail_bar = go.Figure()
+    fig_detail_bar.add_trace(go.Bar(
+        x=selected_names,
+        y=features_display,
+        marker_color=['#EF553B' if val < 0 else '#636EFA' for val in features_display],
+        text=[f"{val:.4f}" for val in features_display],
+        textposition='auto',
+    ))
+    
+    fig_detail_bar.update_layout(
+        height=300,
+        margin=dict(l=20, r=20, t=20, b=20),
+        yaxis=dict(title="정규화된 수치 (Z-Score)"),
+        plot_bgcolor="rgba(0,0,0,0)"
+    )
+    fig_detail_bar.add_hline(y=0, line_width=1.5, line_color="black") # 0선 강조
+    
+    st.plotly_chart(fig_detail_bar, use_container_width=True)
+
+    # 텍스트 설명 (이미지 UI 유지)
     desc = {
-        "H_std": "**색상 다양성**: 핵의 불규칙한 모양과 염색 반응을 포착합니다. 높을수록 세포가 변형되었음을 의미합니다.",
-        "B_std": "**색 농도 편차**: 특정 구역의 세포 밀도가 비정상적으로 높을 때 수치가 상승합니다.",
-        "GLCM_Contrast": "**질감 대비**: 조직 경계면의 거친 정도입니다. 암세포 침윤 시 질감이 매우 무질서해집니다.",
-        "GLCM_Energy": "**질감 균일성**: 조직의 규칙성입니다. 암 조직은 무질서하기 때문에 이 값이 낮아집니다.",
-        "LBP_4": "**미세 형태 패턴**: 암세포 고유의 기하학적 배열 형태를 탐지하는 지문 역할을 합니다."
+        "H_std": "**색상 다양성**: 핵의 불규칙한 모양 포착. 높을수록 세포 변형 의미.",
+        "B_std": "**색 농도 편차**: 세포 밀도가 비정상적으로 높을 때 상승.",
+        "GLCM_Contrast": "**질감 대비**: 조직의 거친 정도. 암 침윤 시 무질서해짐.",
+        "GLCM_Energy": "**질감 균일성**: 조직의 규칙성. 암 조직은 이 값이 낮아짐.",
+        "LBP_4": "**미세 형태 패턴**: 암세포 고유의 기하학적 배열 탐지 지문."
     }
 
     detail_cols = st.columns(5)
     for i, name in enumerate(selected_names):
         with detail_cols[i]:
             val = features_display[i]
-            st.metric(label=name, value=f"{val:.4f}")
-            st.progress(float(np.clip(val, 0, 1)))
+            # 수치에 따라 색상 입힌 델타 표시 (옵션)
+            st.metric(label=name, value=f"{val:.4f}", delta=f"{val:.2f}", delta_color="normal")
             st.caption(desc.get(name, ""))
 
 st.caption("⚠️ 본 시스템은 연구용 모델입니다. 최종 의료 판단은 전문의의 확인이 필요합니다.")
